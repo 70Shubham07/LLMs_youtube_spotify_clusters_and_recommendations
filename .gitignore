@@ -1,0 +1,2 @@
+# Ignore data files with literal brackets in name
+**/songs_with_attributes_and_lyrics\[1\].csv

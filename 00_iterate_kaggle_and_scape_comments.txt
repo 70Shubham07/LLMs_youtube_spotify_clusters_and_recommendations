@@ -1,0 +1,245 @@
+Flow Summary
+
+Build YouTube client with the provided API key.
+Load mapping CSV linking Spotify tracks and YouTube URLs; parse Spotify track IDs and YouTube video IDs from those fields.
+For each video, fetch top-level comments with pagination; stop when reaching MAX_COMMENTS_PER_VIDEO or no more pages.
+Sort comments by like count, keep the top ones, and collect them with their associated spotify_id and video_id.
+Record cases where comments are disabled or errors occur.
+Materialize curated comments to a DataFrame and save to CSV; also write a secondary CSV for tracking (currently built from the same curated data).
+
+
+
+Datasets
+
+Input: Parameters JSON
+Source: parameters_file.json (local file).
+Fields:
+input_csv: string path to a Spotify CSV (assigned to INPUT_CSV).
+youtube_api_key_2: string API key for YouTube (assigned to YOUTUBE_API_KEY).
+start_index_in_spotify_data: integer, number of initial rows to skip.
+total_songs: integer, max rows to process (loop breaks when exceeded).
+max_comments_per_video: integer, cap for comments to collect per video.
+Input: Spotify CSV
+Source: path from input_csv; loaded into df_spotify (not used later).
+Structure: general Spotify metadata CSV; specifics not referenced by the later logic in this notebook.
+Input: Spotify–YouTube Mapping CSV
+Source: Spotify_Youtube.csv, read as df_spotify_youtube; drops Unnamed: 0.
+Required columns:
+Uri: Spotify URI; spotify_id is parsed via Uri.split(':')[2].
+Url_youtube: YouTube URL; video_id is parsed via Url_youtube.split('=')[1].
+Output: Curated Comments CSV
+Source data: df = DataFrame(collection_of_curated_data).
+Structure (columns): spotify_id (string), video_id (string), comment (string), likes (int).
+Destination: saved to a user-specific absolute path (as configured in the notebook).
+Output: Disabled/Error Log CSV (intended)
+Source data: collection_of_disabled_videos (list of dicts).
+Structure (intended): spotify_id (string), video_id (string), error_message (string).
+Note: The notebook currently builds df_failed from curated data, not disabled/error data.
+In-memory logs (not saved by default):
+skipped_indices: list of (row_index, error_string) for rows where ID parsing failed.
+Jargon Glossary
+
+API: An interface to programmatically access a service; here, the YouTube Data API.
+HttpError: Exception raised by the Google API client when an HTTP request fails (e.g., 403 errors).
+Pagination: Fetching results in pages using nextPageToken until no more pages remain.
+Top-level comment: A direct comment on a video (not a reply to another comment).
+HTML unescape: Converting HTML entities (like &amp;) back to their characters (&).
+Regex: Pattern matching for text; used in clean_text() to strip non-alphanumeric characters.
+GPT-5 • 1x
+Todos (5/5)
+00_iterate_kaggle_and_scrape_comments.ipynb • Cell 1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Procedure Overview
+
+Setup imports: Loads pandas, time, os, json, regex utilities, and OpenAI client libraries for LLM classification.
+API key init: Reads openai_key.txt and initializes the OpenAI client.
+Define categories: Sets six fixed YouTube comment categories: Humor and Memes, Appreciation and Praise, Words of encouragement, Words of empathy, Personal Stories and Experiences, Nostalgia and Memories.
+Load comments: Reads combined comments from spotify_youtube_comments_combined.csv, adds a sequential unique_id, and extracts the comment list.
+Resume support: If an index file exists, loads it and sets counter to its current length to resume processing; otherwise starts from zero.
+Classification loop: Iterates comments from counter up to a capped index (40000), classifies each comment via LLM into relevant categories, sanitizes/validates the LLM response, and records binary flags per category.
+Sanity checks + retries: Ensures suggested categories are from the allowed list; if not, retries up to 3 times with a stricter prompt.
+Batch persistence: Every 50 processed comments, appends the latest results to the index DataFrame and writes to the index CSV; sleeps briefly to avoid API rate issues.
+Skip tracking: When sanity checks fail after retries, logs the tuple (counter, llm_suggested_categories, comment) to a JSON file for later review.
+Core Logic
+
+Prompting: Builds a prompt asking the LLM to return a comma-separated list of categories relevant to the given comment from the fixed category list.
+LLM response parsing: Strips brackets and splits on commas; then applies strip_special_chars() and trims whitespace/quotes/newlines.
+Validation: check_if_categories_are_proper() compares the parsed list against the allowed category set; if extras are present, it appends corrective instructions to message_history and re-queries up to 3 times.
+Binary encoding: Initializes a dict with unique_id and all category flags set to 0; sets flags to 1 only for categories returned by the LLM after validation.
+Batching and stacking: Converts the last 50 items to a DataFrame, stacks onto the cumulative index via stack_dataframes() (concat with ignore_index=True), then writes out.
+Error/skip handling: Collects problematic items in list_of_tuples_of_skipped_indices_and_comments and persists them with tuples_to_json().
+Inputs
+
+Comments dataset: spotify_youtube_comments_combined.csv — source of comment text and basis for unique_id.
+OpenAI key: openai_key.txt — API key for the OpenAI client (expected in the working directory).
+Existing index (optional): index CSV for resuming:
+Reads from: C:/Users/shubh/programming_work/git_repos/NU/courses_and_academics/data_mining/proj/refined/index_comment_categories_recent.csv
+If present, determines counter starting point.
+Outputs
+
+Indexed base CSV: C:/Users/shubh/programming_work/git_repos/NU/courses_and_academics/data_mining/proj/refined/df_indexed.csv — a copy of the input DataFrame with unique_id.
+Category index CSV (incremental): C:/Users/shubh/programming_work/git_repos/NU/courses_and_academics/data_mining/proj/refined/index_comment_categories_recent.csv — rows of per-comment category flags plus unique_id, appended in batches of 50.
+Skipped items JSON: C:/Users/shubh/programming_work/git_repos/NU/courses_and_academics/data_mining/proj/comment_classification_data/list_of_tuples_of_skipped_indices_and_comments_3.json — tuples capturing cases where validation failed after retries.
+Parameters
+
+Category set: Six fixed categories listed above; acts as an allowlist.
+Model: gpt-3.5-turbo for chat completions.
+Temperature: 0.1 for deterministic, consistent classification.
+Retry limit: 3 attempts in check_if_categories_are_proper().
+Batch size: 50 items per write to the index CSV.
+Processing range: Iterates from counter (existing index length or 0) up to 40000.
+Sleep between batches: time.sleep(3) after each batch write to be gentle on rate limits.
+Would you like me to also summarize the column schema of the outputs (e.g., exact columns and example rows), or run a quick check to confirm current counter and resume status?
+
+GPT-5 • 1x
+Draft concise bullet-point summary (4/4)
+02_create_comment_classes_refined_1.ipynb • Cell 1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Overall Procedure
+
+Load Data: Reads the combined dataset into df from spotify_youtube_comments_combined.csv.
+Set Categories: Defines a list youtube_comment_categories (e.g., Love/Relationships, Self-Reflection, Social/Political, etc.) to serve as the 
+label space.
+
+Prep Records: Focuses on lyrics-oriented fields (e.g., selects spotify_id and lyrics into a working view and drops comment-only columns where needed).
+LLM Classification: Uses chat_completion_2() (OpenAI Chat API) to classify each lyric into all relevant categories; returns a comma-separated list of category names.
+Sanity Check + Retry: check_if_categories_are_proper() cleans the LLM output, ensures suggested categories are from the allowed list, and retries up to three times by refining the prompt if any out-of-scope labels appear.
+Boolean Encoding: For each lyric, builds a comment_category_2_bool dict with 0/1 per category, plus metadata (e.g., unique_id, lyric).
+Batch Accumulation: Appends each encoded row to list_of_category_2_bools_per_comment; periodically stacks the latest 50 results into an index DataFrame via stack_dataframes().
+Incremental Save: If the index file already exists, it loads and appends; otherwise starts fresh. Writes the growing index to index_lyric_categories_recent.csv (path variable file_path).
+Final Aggregation: Converts list_of_category_2_bools_per_comment to a DataFrame (df_comments_and_labels) and saves a full labels table (external path in code comments).
+Skipped Cases Tracking: Logs problematic lyrics and their raw LLM outputs to JSON for later review via tuples_to_json().
+Key Logic
+
+Validation Loop: If any LLM-suggested category isn’t in youtube_comment_categories, it adds clarifying instructions to message_history and retries to keep labels consistent and clean.
+Robust String Handling: Uses strip_special_chars() and .strip() to normalize the LLM output (trims whitespace, punctuation, brackets).
+Safe Concatenation: stack_dataframes() handles empty-start append and resets index to avoid misaligned indices during incremental saves.
+Input Datasets
+
+Combined Source: spotify_youtube_comments_combined.csv
+Likely columns: spotify_id, lyrics, plus YouTube-related fields like comment, likes, video_id, youtube_video_id, and utility columns (e.g., Unnamed: 0).
+Usage in notebook: Drops comment-only columns when focusing on lyrics; constructs a working subset with spotify_id and lyrics for classification and deduplication.
+Output Datasets
+
+Incremental Index (Recent): index_lyric_categories_recent.csv
+Structure: Tabular rows with unique_id, lyric, and one column per category from youtube_comment_categories, each as 0/1 indicating presence.
+Behavior: Appended in chunks of the latest 50 classified items; de-duplication may be applied (a commented option is present).
+Full Labels Table: Saved as df_comments_and_labels.csv (external path configured in the notebook)
+Structure: Similar to the index file but covers the entire run; includes unique_id, lyric, and boolean columns for each category.
+Other referenced outputs: Code comments mention df_indexed_lyric.csv and df_indexed.csv for refined indexed views, indicating earlier/alternative save targets with similar structures.
+Jargon
+
+LLM: Large Language Model; here, an AI model used to classify text into categories via prompts.
+Prompt: The instruction sent to the LLM describing the task (e.g., “Classify this lyric…”).
+Message History: A list of user and assistant messages maintaining context for iterative LLM interactions.
+Sanity Check: A validation step ensuring outputs match the allowed category list.
+Boolean Encoding: Representing category membership with 0 (absent) or 1 (present).
+Index DataFrame: A cumulative table that indexes items (lyrics) alongside category flags, saved and updated over time.
+Want me to extract a sample schema from the first few rows of the index file and confirm exact column names?
+
+GPT-5 • 1x
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Overall Procedure
+
+Load Data: Reads the combined dataset into df from spotify_youtube_comments_combined.csv.
+Set Categories: Defines a list youtube_comment_categories (e.g., Love/Relationships, Self-Reflection, Social/Political, etc.) to serve as the label space.
+Prep Records: Focuses on lyrics-oriented fields (e.g., selects spotify_id and lyrics into a working view and drops comment-only columns where needed).
+LLM Classification: Uses chat_completion_2() (OpenAI Chat API) to classify each lyric into all relevant categories; returns a comma-separated list of category names.
+Sanity Check + Retry: check_if_categories_are_proper() cleans the LLM output, ensures suggested categories are from the allowed list, and retries up to three times by refining the prompt if any out-of-scope labels appear.
+Boolean Encoding: For each lyric, builds a comment_category_2_bool dict with 0/1 per category, plus metadata (e.g., unique_id, lyric).
+Batch Accumulation: Appends each encoded row to list_of_category_2_bools_per_comment; periodically stacks the latest 50 results into an index DataFrame via stack_dataframes().
+Incremental Save: If the index file already exists, it loads and appends; otherwise starts fresh. Writes the growing index to index_lyric_categories_recent.csv (path variable file_path).
+Final Aggregation: Converts list_of_category_2_bools_per_comment to a DataFrame (df_comments_and_labels) and saves a full labels table (external path in code comments).
+Skipped Cases Tracking: Logs problematic lyrics and their raw LLM outputs to JSON for later review via tuples_to_json().
+Key Logic
+
+Validation Loop: If any LLM-suggested category isn’t in youtube_comment_categories, it adds clarifying instructions to message_history and retries to keep labels consistent and clean.
+Robust String Handling: Uses strip_special_chars() and .strip() to normalize the LLM output (trims whitespace, punctuation, brackets).
+Safe Concatenation: stack_dataframes() handles empty-start append and resets index to avoid misaligned indices during incremental saves.
+Input Datasets
+
+Combined Source: spotify_youtube_comments_combined.csv
+Likely columns: spotify_id, lyrics, plus YouTube-related fields like comment, likes, video_id, youtube_video_id, and utility columns (e.g., Unnamed: 0).
+Usage in notebook: Drops comment-only columns when focusing on lyrics; constructs a working subset with spotify_id and lyrics for classification and deduplication.
+Output Datasets
+
+Incremental Index (Recent): index_lyric_categories_recent.csv
+Structure: Tabular rows with unique_id, lyric, and one column per category from youtube_comment_categories, each as 0/1 indicating presence.
+Behavior: Appended in chunks of the latest 50 classified items; de-duplication may be applied (a commented option is present).
+Full Labels Table: Saved as df_comments_and_labels.csv (external path configured in the notebook)
+Structure: Similar to the index file but covers the entire run; includes unique_id, lyric, and boolean columns for each category.
+Other referenced outputs: Code comments mention df_indexed_lyric.csv and df_indexed.csv for refined indexed views, indicating earlier/alternative save targets with similar structures.
+Jargon
+
+LLM: Large Language Model; here, an AI model used to classify text into categories via prompts.
+Prompt: The instruction sent to the LLM describing the task (e.g., “Classify this lyric…”).
+Message History: A list of user and assistant messages maintaining context for iterative LLM interactions.
+Sanity Check: A validation step ensuring outputs match the allowed category list.
+Boolean Encoding: Representing category membership with 0 (absent) or 1 (present).
+Index DataFrame: A cumulative table that indexes items (lyrics) alongside category flags, saved and updated over time.
+Want me to extract a sample schema from the first few rows of the index file and confirm exact column names?
+
+GPT-5 • 1x
