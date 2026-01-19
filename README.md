@@ -1,3 +1,5 @@
+_Note: This README was generated with help from GitHub Copilot and manually audited for accuracy._
+
 # ETL Notebooks Overview (00–03)
 
 This README explains, in simple bullet points, what each notebook does in the ETL pipeline.
