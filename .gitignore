@@ -1,2 +1,8 @@
 # Ignore data files with literal brackets in name
 **/songs_with_attributes_and_lyrics\[1\].csv
+ml_stuff/spotify_comments_recent_and_labels.csv
+etl/df_indexed.csv
+etl/spotify_youtube_comments_combined.csv
+
+# Ignore all CSV files everywhere
+*.csv
