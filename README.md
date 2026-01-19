@@ -118,3 +118,18 @@ This README explains, in simple bullet points, what each notebook does in the ET
 - **Notes:**
   - If models output probabilities, tune per-label decision thresholds (not only 0.5) to improve Micro F1.
   - Keep feature scaling consistent with `StandardScaler` fitted on training data.
+
+### Metrics — Notebook Results
+- **Random Forest (MultiOutputClassifier):**
+  - Subset Accuracy: 0.1716
+  - Micro F1-Score: 0.5315
+- **Gradient Boosting (MultiOutputClassifier + GridSearchCV):**
+  - CV Best Score (Accuracy): 0.1677
+  - Test Accuracy: 0.1855
+  - Micro F1-Score: 0.5260
+- **XGBoost (MultiOutputClassifier + GridSearchCV):**
+  - Test Accuracy: 0.1932
+  - Micro F1-Score: 0.5379
+- **Interpretation (from notebook notes):**
+  - Subset accuracy with 4 labels is strict; values around ~0.17 can be reasonable.
+  - Micro F1 around ~0.53 is a moderately good overall multi-label score.
